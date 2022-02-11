@@ -1,31 +1,44 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+
 '''
 NewsPie - a minimalistic news aggregator built with Flask and powered by
-News API (https://newsapi.org/).
+[News API](https://newsapi.org/).
 
-Created by @skamieniarz (https://github.com/skamieniarz) in 2019.
+SOURCE: [newspie](https://github.com/skamieniarz/newspie)
 '''
-import configparser
 import json
 import logging
 import os
-from typing import Union
-
 import requests
 import requests_cache
 from dateutil import parser
-from flask import (Flask, make_response, redirect, render_template, request,
-                   url_for)
+from decouple import config
+from flask import (Flask, make_response, redirect, render_template, request, url_for)
+from pathlib import Path
+from typing import Union
 
-CONFIG = configparser.ConfigParser()
-CONFIG.read('config.ini')
-API_KEY = os.environ.get('NEWS_API_KEY')
-TOP_HEADLINES = CONFIG['ENDPOINTS']['TOP_HEADLINES']
-EVERYTHING = CONFIG['ENDPOINTS']['EVERYTHING']
-PAGE_SIZE = int(CONFIG['VARIOUS']['PAGE_SIZE'])
 
-CATEGORIES = ('general', 'sports', 'business', 'entertainment', 'health',
-              'science', 'technology')
+env = Path('.env')
+if env.exists():
+    API_KEY = config('NEWS_API_KEY')
+    EXCLUDE_DOMAINS = config('EXCLUDE_DOMAINS', cast=lambda x: x.split(','))    # QA: may need comma
+    TOP_HEADLINES = config('TOP_HEADLINES')
+    EVERYTHING = config('EVERYTHING')
+    PAGE_SIZE = int(config('PAGE_SIZE'))
+else:
+    API_KEY = os.environ.get('NEWS_API_KEY')
+    EXCLUDE_DOMAINS = os.environ.get('EXCLUDE_DOMAINS').split(',')              # QA: may need comma
+    TOP_HEADLINES = os.getenv('TOP_HEADLINES')
+    EVERYTHING = os.getenv('EVERYTHING')
+    PAGE_SIZE = int(os.getenv('PAGE_SIZE'))
+
+
+CATEGORIES = ('technology',
+            'entertainment',
+            'general',
+            'science',
+            'business',
+)
 with open('data/countries.json') as json_file:
     COUNTRIES = json.load(json_file)
 
@@ -35,6 +48,9 @@ requests_cache.install_cache(cache_name='news_cache',
                              expire_after=300)
 
 APP = Flask(__name__)
+APP.config['ENV'] = 'development'
+APP.config['DEBUG'] = True
+APP.config['TESTING'] = True
 SESSION = requests.Session()
 SESSION.headers.update({'Authorization': API_KEY})
 
@@ -83,7 +99,7 @@ def category(category):
             articles = parse_articles(response.json())
             return render(articles, page, pages, country, category)
         elif response.status_code == 401:
-            return render_template(CONFIG['VARIOUS']['401_TEMPLATE'])
+            return render_template(config('401_TEMPLATE'))
     return redirect(url_for('category', category='general', page=page))
 
 
@@ -184,7 +200,7 @@ def render(articles, page, pages, country, category):
     ''' Renders the template with appropriate variables. Up to 12 pages
         allowed. '''
     pages = pages if pages <= 12 else 12
-    return render_template(CONFIG['VARIOUS']['TEMPLATE'],
+    return render_template(config('TEMPLATE'),
                            articles=articles,
                            categories=CATEGORIES,
                            category=category,
